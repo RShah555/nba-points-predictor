@@ -1,11 +1,25 @@
 # NBA Predictor
 
+[![CI](https://github.com/RShah555/nba-points-predictor/actions/workflows/ci.yml/badge.svg)](https://github.com/RShah555/nba-points-predictor/actions/workflows/ci.yml)
+
+**Live demo: [nba-predictor-bdtq.onrender.com](https://nba-predictor-bdtq.onrender.com)** (free hosting, so the
+first visit after a quiet spell takes about a minute to wake up)
+
 Projects every NBA player's next game: points, rebounds, assists and more, each as a full range of
 outcomes rather than one number. On top of that it gives fantasy points (ESPN, Yahoo, Sleeper),
 start/sit odds, betting line value, and a live record against real sportsbooks.
 
 **Stack:** LightGBM, Optuna, SciPy and FastAPI in Python, plus a Next.js and TypeScript dashboard,
 all served as one app. Data comes from NBA.com (`nba_api` and NBA's CDN) and ESPN's injury report.
+
+![Player page: projected points with its range, what is driving it, and who is playing](docs/player.png)
+
+<details>
+<summary>Tonight's slate</summary>
+
+![Tonight: projected fantasy points for everyone playing, with injury and teammates-out flags](docs/tonight.png)
+
+</details>
 
 ## Results
 

@@ -6,7 +6,7 @@ import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Courtside: NBA projections",
+  title: "NBA Predictor",
   description: "Probabilistic NBA player projections, fantasy points and prop pricing.",
 };
 

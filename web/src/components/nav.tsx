@@ -63,7 +63,7 @@ export function Nav() {
           <span className="flex size-7 items-center justify-center rounded-lg bg-accent text-white">
             <Activity className="size-4" aria-hidden />
           </span>
-          <span className="hidden sm:inline">Courtside</span>
+          <span className="hidden sm:inline">NBA Predictor</span>
         </Link>
         <nav className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
           {LINKS.map((l) => {
