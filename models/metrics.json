@@ -1,0 +1,24 @@
+{
+  "train_seasons": [
+    "2023-24",
+    "2024-25"
+  ],
+  "test_season": "2025-26",
+  "train_rows": 47154,
+  "test_rows": 23805,
+  "results": {
+    "Season average so far": {
+      "MAE": 4.69,
+      "RMSE": 6.18
+    },
+    "Last 5 game average": {
+      "MAE": 4.81,
+      "RMSE": 6.33
+    },
+    "Gradient boosting model": {
+      "MAE": 4.62,
+      "RMSE": 6.0
+    }
+  },
+  "improvement_pct": 1.5
+}
