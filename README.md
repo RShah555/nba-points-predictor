@@ -99,8 +99,10 @@ nba-predictor serve      # the whole app at http://127.0.0.1:8000
 | `pytest`, `ruff check .`, `mypy` | Tests, lint, type check |
 | `cd web && npm run dev` | Dashboard with hot reload on :3000, proxying `/api` to :8000 |
 
-**Docker:** `docker build -t nba-predictor . && docker run -p 7860:7860 nba-predictor` runs the same
-single app the hosted version uses.
+**Hosting (free):** `render.yaml` deploys the Dockerfile on Render's free plan straight from this repo
+(render.com, then New, then Blueprint, then pick the repo) and redeploys on every push. Run
+`nba-predictor snapshot` now and then so a cold start has recent games; anything newer comes from NBA's CDN.
+Locally: `docker build -t nba-predictor . && docker run -p 7860:7860 nba-predictor`.
 
 ## Code map
 
