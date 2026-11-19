@@ -1,0 +1,19 @@
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    volumes:
+      - nba-data:/app/data   # cached game logs and schedule survive restarts
+    environment:
+      NBA_CORS_ORIGINS: '["http://localhost:3000"]'
+
+  web:
+    build:
+      context: ./web
+      args:
+        API_URL: http://api:8000
+    ports: ["3000:3000"]
+    depends_on: [api]
+
+volumes:
+  nba-data:

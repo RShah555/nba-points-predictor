@@ -1,4 +1,6 @@
 {
+  "version": "2.0.0",
+  "trained_at": "2026-11-19T03:19:18+00:00",
   "train_seasons": [
     "2023-24",
     "2024-25"
@@ -6,19 +8,24 @@
   "test_season": "2025-26",
   "train_rows": 47154,
   "test_rows": 23805,
-  "results": {
+  "headline": {
     "Season average so far": {
-      "MAE": 4.69,
-      "RMSE": 6.18
+      "MAE": 4.693,
+      "RMSE": 6.175
     },
     "Last 5 game average": {
-      "MAE": 4.81,
-      "RMSE": 6.33
+      "MAE": 4.813,
+      "RMSE": 6.327
     },
-    "Gradient boosting model": {
-      "MAE": 4.62,
-      "RMSE": 6.0
+    "v1 gradient boosting": {
+      "MAE": 4.615,
+      "RMSE": 5.996
+    },
+    "v2 LightGBM + Optuna": {
+      "MAE": 4.575,
+      "RMSE": 5.95
     }
   },
-  "improvement_pct": 1.5
+  "improvement_pct": 2.5,
+  "improvement_vs_v1_pct": 0.9
 }

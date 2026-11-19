@@ -1,4 +1,19 @@
 data/
 __pycache__/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .venv/
+*.egg-info/
+.coverage
+coverage.xml
+mlruns/
+mlartifacts/
+.env
+
+# web
+web/node_modules/
+web/.next/
+web/out/
+web/next-env.d.ts
+web/*.tsbuildinfo
