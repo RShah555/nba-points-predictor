@@ -12,6 +12,23 @@ export interface Player {
   ast: number | null;
   min: number | null;
   headshot: string;
+  injury: Injury | null;
+}
+
+export interface Injury {
+  status: string;
+  note: string;
+  return_date: string | null;
+  out: boolean;
+}
+
+export interface Teammate {
+  id: number;
+  name: string;
+  min: number;
+  pts: number;
+  injury: Injury | null;
+  out: boolean;
 }
 
 export interface Game {
@@ -21,6 +38,43 @@ export interface Game {
   rest_days: number;
   back_to_back: boolean;
   source: "schedule" | "manual";
+  teammates_out: number;
+  teammates?: Teammate[];
+}
+
+export interface TrackerRow {
+  game_date: string;
+  player_id: number;
+  player: string;
+  stat: Stat;
+  line: number;
+  over_odds: number;
+  under_odds: number;
+  books: number;
+  p_over: number;
+  pick: "over" | "under" | "pass";
+  pick_odds: number | null;
+  edge: number | null;
+  actual: number | null;
+  result: "over" | "under" | "push" | null;
+  profit: number | null;
+}
+
+export interface Tracker {
+  enabled: boolean;
+  summary: {
+    props_tracked: number;
+    graded: number;
+    picks: number;
+    wins: number;
+    losses: number;
+    pushes: number;
+    units: number;
+    roi: number | null;
+    brier_model: number | null;
+    pending: number;
+  };
+  rows: TrackerRow[];
 }
 
 export interface Quantiles {

@@ -1,14 +1,11 @@
 # NBA Predictor
 
-Probabilistic next game projections for every NBA player: the full distribution of points, rebounds,
-assists, threes, steals, blocks, turnovers and shooting volume. These feed fantasy projections for ESPN,
-Yahoo and Sleeper scoring, start/sit odds, and a prop pricing tool with expected value and Kelly sizing.
+Projects every NBA player's next game: points, rebounds, assists and more, each as a full range of
+outcomes rather than one number. On top of that it gives fantasy points (ESPN, Yahoo, Sleeper),
+start/sit odds, betting line value, and a live record against real sportsbooks.
 
-**Stack:** Python, LightGBM, Optuna, SciPy, MLflow and FastAPI on the backend; Next.js, TypeScript,
-Tailwind and Recharts on the frontend. All data is NBA.com data, pulled with `nba_api`.
-
-> v1 (a single points model with a Streamlit app) is tagged [`v1.0.0`](../../tree/v1.0.0). v2 keeps its design rules:
-> no leakage, the same train and test seasons, the same baselines, and the season worked out from today's date.
+**Stack:** LightGBM, Optuna, SciPy and FastAPI in Python, plus a Next.js and TypeScript dashboard,
+all served as one app. Data comes from NBA.com (`nba_api` and NBA's CDN) and ESPN's injury report.
 
 ## Results
 
@@ -22,199 +19,108 @@ Held out test: 23,805 player games from 2025-26, trained on 47,154 games from 20
 | Season average so far | 4.69 | 6.17 |
 | Last 5 game average | 4.81 | 6.33 |
 | v1 gradient boosting | 4.62 | 6.00 |
-| v2 LightGBM + Optuna | 4.58 | 5.95 |
+| v2 LightGBM + Optuna | 4.51 | 5.86 |
 
-The v2 model's average miss is 2.5% smaller than the best baseline and 0.9% smaller than v1.
+The v2 model's average miss is 4.0% smaller than the best baseline and 2.3% smaller than v1.
 
 **Every stat** (MAE, and how often the actual result landed inside the 80% interval)
 
 | Stat | Model | Season avg | Last 5 | 80% interval coverage |
 | --- | --- | --- | --- | --- |
-| PTS | 4.58 | 4.69 | 4.81 | 85.1% |
-| REB | 1.89 | 1.92 | 1.99 | 89.0% |
-| AST | 1.35 | 1.37 | 1.41 | 91.0% |
-| FG3M | 0.90 | 0.90 | 0.94 | 93.4% |
-| STL | 0.73 | 0.73 | 0.76 | 95.0% |
-| BLK | 0.52 | 0.51 | 0.52 | 95.2% |
-| TOV | 0.89 | 0.91 | 0.94 | 93.5% |
-| FGM | 1.75 | 1.79 | 1.85 | 88.9% |
-| FGA | 2.75 | 2.88 | 2.87 | 85.7% |
-| FTM | 1.35 | 1.35 | 1.39 | 92.5% |
-| FTA | 1.64 | 1.65 | 1.69 | 91.7% |
+| PTS | 4.51 | 4.69 | 4.81 | 84.9% |
+| REB | 1.87 | 1.92 | 1.99 | 88.8% |
+| AST | 1.34 | 1.37 | 1.41 | 90.7% |
+| FG3M | 0.90 | 0.90 | 0.94 | 93.2% |
+| STL | 0.73 | 0.73 | 0.76 | 94.9% |
+| BLK | 0.52 | 0.51 | 0.52 | 95.1% |
+| TOV | 0.88 | 0.91 | 0.94 | 93.4% |
+| FGM | 1.74 | 1.79 | 1.85 | 88.7% |
+| FGA | 2.68 | 2.88 | 2.87 | 85.7% |
+| FTM | 1.35 | 1.35 | 1.39 | 92.4% |
+| FTA | 1.63 | 1.65 | 1.69 | 91.6% |
 
 **Fantasy points** (expected fantasy points vs actual)
 
 | Scoring | Model MAE | Season avg MAE |
 | --- | --- | --- |
-| ESPN | 9.75 | 10.04 |
-| Yahoo | 7.66 | 7.95 |
+| ESPN | 9.63 | 10.04 |
+| Yahoo | 7.50 | 7.95 |
 
-**Calibration (points).** Log likelihood per game -3.0178 (recalibrated), -3.0396 (raw negative binomial), -3.6864 (plain Poisson). Largest PIT bin deviation from a perfect 10%: 0.9% (raw: 1.9%). Over/under Brier score 0.2399 vs 0.25 for a coin flip.
+**Calibration (points).** Log likelihood per game -2.9993 (recalibrated), -3.0235 (raw negative binomial), -3.6203 (plain Poisson). Largest PIT bin deviation from a perfect 10%: 0.9% (raw: 2.4%). Over/under Brier score 0.2364 vs 0.25 for a coin flip.
 
-**Prop backtest (points, synthetic lines).** 14,110 games of players averaging 20+ minutes, priced by a baseline book that knows only the season average (calibrated on its own past errors, 4.5% margin). The model bet 10,514 of them, quarter Kelly, at most 2% per bet and 20% per day, no compounding: hit rate 59.8%, ROI on stakes 15.5%, max drawdown 6.4%. This shows the model's probabilities beat a season average line, not that it beats sportsbooks, which also price in injuries, lineups and market money.
+**Prop backtest (points, synthetic lines).** 14,110 games of players averaging 20+ minutes, priced by a baseline book that knows only the season average (calibrated on its own past errors, 4.5% margin). The model bet 11,452 of them, quarter Kelly, at most 2% per bet and 20% per day, no compounding: hit rate 61.0%, ROI on stakes 17.3%, max drawdown 5.5%. This shows the model's probabilities beat a season average line, not that it beats sportsbooks, which also price in injuries, lineups and market money.
 <!-- RESULTS:END -->
 
 ## How it works
 
-```
-stats.nba.com ──► data.py ──► features.py ──► modeling.py ──► distributions.py ──► predictor.py ──► FastAPI ──► Next.js
- LeagueGameLog    cache +      152 leakage    LightGBM per     negative binomial    projections,     /api/*       dashboard
- + schedule       retries      safe features  stat, Optuna     + recalibration      props, slate
-                                              tuned            + Gaussian copula
-```
+1. **Data.** Every player game from the last three seasons (about 24,000 a season). Live, the season
+   in progress updates from NBA's CDN, which also works from cloud servers, and the schedule supplies
+   each player's next opponent, home or away, and rest days. Games still in progress are ignored until
+   they're final.
+2. **Features (158).** Recent form over 3 to 20 games, minutes and usage, shooting, rest and
+   schedule, last season, the opponent's defense, and **which regular teammates are out**. Every
+   feature uses only games played *before* the one being predicted. Live predictions run the same
+   code as training, and tests check both properties.
+3. **Injuries.** In history, a teammate counts as "out" when a regular (15+ minutes a game) didn't
+   play. Live, the "out" list comes from ESPN's injury report, and the player page lets you toggle any
+   teammate to see a what-if.
+4. **Models.** One LightGBM model per stat, tuned with Optuna on a later season than it trains on.
+   Each prediction gets a SHAP explanation in plain units, like "Teammates out +2.1 points".
+5. **Ranges, not just averages.** Each stat gets a negative binomial distribution whose spread
+   depends on the player. The distribution is then recalibrated so its probabilities hold up on games
+   it never saw. A Gaussian copula links the stats, so fantasy points and combined props are simulated
+   realistically.
+6. **Evaluation.** Walk-forward: train on 2023-24 and tune on 2024-25, then train on both and test on
+   all of 2025-26. The baselines are the player's season average and his last 5 game average.
 
-**Data.** A single `LeagueGameLog` call per season returns every player game, about 24,000 per season.
-Finished seasons are cached forever. The season in progress refreshes every 6 hours in a background thread,
-and the API keeps serving the cached copy while it downloads. The schedule (`ScheduleLeagueV2`) fills in
-each player's real next opponent, home or away, and days of rest. Every call to stats.nba.com retries
-3 times, 30 seconds apart.
-
-**Features (152).** Every feature for a game uses only games played before it: each stat is shifted one
-game before any window. The features are:
-
-* 3, 5, 10 and 20 game rolling means and an exponentially weighted mean for 17 box score stats
-* per 36 minute rates, a usage proxy, true shooting and 3 point percentage, and a minutes trend
-* volatility (10 game standard deviation)
-* season to date averages and last season's averages
-* rest days, back to backs, games in the last 7 days, and days into the season
-* the opponent's season to date and last 10 game numbers allowed for each stat, plus possessions allowed
-
-**Train/serve parity.** To predict a game that hasn't been played, the predictor appends a placeholder
-row for it and runs the same feature pipeline used in training. There is no second implementation that
-could drift from the first. `tests/test_features.py` checks that a live feature row matches the training
-row for the same game exactly.
-
-**Models.** There is one LightGBM model per stat, using a Poisson objective: counts with a log link, so
-predictions are always positive. Optuna's TPE sampler tunes each model on a later season than it trains
-on. Explanations come from LightGBM's built in TreeSHAP. Because the model works on a log scale, SHAP
-values multiply rather than add. The API groups them into feature families and converts them to the
-stat's own units, so "Opponent defense +1.4 points" adds up exactly to the projection.
-
-**Distributions.** A predicted mean isn't enough for props or fantasy, so the model builds a full
-distribution in three steps:
-
-1. **Shape.** A negative binomial whose spread grows with the mean: `size = exp(c0 + c1 log mu)`, fit by
-   maximum likelihood on out of sample predictions.
-2. **Recalibration.** Points come in 2s and 3s, so a negative binomial's shape is slightly off for them.
-   A monotone map G learned from out of sample PIT values corrects the CDF to G(F(y))
-   (Kuleshov et al., 2018). For stats whose shape was already right, G is close to the identity.
-3. **Dependence.** A Gaussian copula fit on normal scores of the PIT values ties the 11 stats together,
-   so simulations capture that a hot shooting night lifts PTS, FGM and 3PM at once. That matters for
-   fantasy points, PRA props and double-double odds.
-
-**Evaluation.** Evaluation runs walk forward over seasons:
-
-| Fold | Train | Test | Role |
-| --- | --- | --- | --- |
-| 1 | 2023-24 | 2024-25 | validation: hyperparameters are tuned here |
-| 2 | 2023-24, 2024-25 | 2025-26 | held out test: the headline numbers |
-| serve | all three | 2026-27 live | the model the API uses |
-
-Each fold's distribution parameters are fit on the previous fold's predictions, so the test season never
-informs its own intervals. The baselines are the two numbers a fantasy player would actually use: the
-player's season average so far and his last 5 game average. The v1 model is retrained on the same split
-as a third reference.
-
-**Quant.** The quant tools are:
-
-* **Prop pricing.** Converts American odds, removes the vig proportionally, and computes edge against
-  the fair price, expected value per unit, and growth optimal Kelly sizing with pushes handled
-  (`f = (bp − q) / (b(p + q))`). The stake is fractional Kelly, capped.
-* **Combo markets.** PRA, PR, PA, RA and steals plus blocks are priced from copula simulations.
-* **Backtest.** Historical sportsbook lines aren't freely available, so the backtest bets against a
-  baseline book. The book knows only the player's season average, with its spread calibrated on its
-  own past errors, hangs the half point line nearest its median, and prices both sides at its fair
-  probability plus a 4.5% margin. A model with no extra information finds zero bets against it; a
-  unit test checks that. Bets are limited to players averaging 20+ minutes, at most 2% of the bankroll
-  per bet and 20% per day, with no compounding. The backtest reports the profit curve, drawdown, hit
-  rate by edge bucket, Brier score and a reliability diagram.
-
-  Why a 2.5% MAE gain still gives a real edge: a single game's points have an SD of about 6, so MAE is
-  mostly noise that no model can remove. Moving the mean a point or two barely changes MAE, but it
-  moves P(over) by about 10 points. Real books also price in injuries, lineups and market money,
-  which this baseline doesn't, so treat ROI as an upper bound. Calibration is the honest number.
+**Betting tools.** Prop pricing removes the bookmaker's margin, then computes edge, expected value
+and a fractional Kelly stake. The backtest bets against a fake bookmaker built from the season
+average, so it shows real signal but isn't proof the model beats real books. For that, the
+**real-lines tracker** saves each day's actual sportsbook lines with the model's picks and grades
+them after the games. It's off until you add a free key from
+[the-odds-api.com](https://the-odds-api.com) as `NBA_ODDS_API_KEY`.
 
 ## Run it
 
 ```bash
 python -m venv .venv && .venv/Scripts/activate      # macOS/Linux: source .venv/bin/activate
-pip install -e ".[dev,mlops]"
+pip install -e ".[dev]"
+cd web && npm install && npm run build && cd ..      # builds the dashboard into web/out
 
-nba-predictor train          # downloads 3 seasons once, tunes, evaluates, writes models/ and this README's results
-nba-predictor serve          # API on http://127.0.0.1:8000  (docs at /docs)
-
-cd web && npm install && npm run dev                # dashboard on http://localhost:3000
+nba-predictor train      # downloads 3 seasons once, tunes, evaluates (about 7 min)
+nba-predictor serve      # the whole app at http://127.0.0.1:8000
 ```
 
-Or use `docker compose up --build`, which runs the API on port 8000 and the web app on port 3000.
-
-Other commands:
-
-```bash
-pytest                       # leakage, parity, distribution, betting math, fantasy and API tests
-ruff check . && mypy         # lint and type check
-nba-predictor refresh        # force download today's games and schedule
-mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db   # browse training runs
-```
-
-`nba-predictor train --trials 0` skips tuning and finishes in about 90 seconds.
-
-## The app
-
-| Page | What it does |
+| Command | What it does |
 | --- | --- |
-| **Slate** | Today's games (or the next game day) and every rotation player's projected fantasy points, sortable by ESPN, Yahoo or Sleeper scoring |
-| **Player** | The projection for the next game: an interval and distribution chart for each stat, "why this number" SHAP explanations, milestone odds (double-double, 30+ points), fantasy points on each platform, and the recent game log |
-| **Props** | Enter a line and odds for any market and get model probability, fair price, edge, EV and a Kelly stake |
-| **Start/Sit** | Two to six players head to head: each one's fantasy distribution, P(A outscores B) and P(best) |
-| **Model** | Backtest results, the calibration (PIT) histograms before and after recalibration, a reliability diagram, the bankroll curve, feature importance and the stat correlation matrix |
+| `nba-predictor train --trials 0` | Trains without tuning (about 2 min) |
+| `nba-predictor refresh` | Pulls the latest games, schedule and injury report |
+| `nba-predictor lines` | Saves today's real prop lines and grades finished ones (needs the key) |
+| `pytest`, `ruff check .`, `mypy` | Tests, lint, type check |
+| `cd web && npm run dev` | Dashboard with hot reload on :3000, proxying `/api` to :8000 |
 
-## API
+**Docker:** `docker build -t nba-predictor . && docker run -p 7860:7860 nba-predictor` runs the same
+single app the hosted version uses.
 
-| Method | Path | |
-| --- | --- | --- |
-| GET | `/api/health` | liveness, model and data status |
-| GET | `/api/meta` | season, teams, markets, scoring systems, headline metrics |
-| GET | `/api/players?q=` | player search, ranked by name match and minutes |
-| GET | `/api/players/{id}` | player card and last 25 games |
-| POST | `/api/projections` | full projection: distributions, combos, fantasy, milestones, explanations |
-| POST | `/api/props` | prop pricing for one market |
-| POST | `/api/compare` | start/sit simulation |
-| GET | `/api/slate` | the next game day's projections for every rotation player |
-| GET | `/api/model/report` | everything from the last training run |
-
-If you leave out `opponent`, the request uses the player's next scheduled game. Interactive docs are at
-`/docs`.
-
-## Project layout
+## Code map
 
 ```
 src/nba_predictor/
-  config.py          settings (NBA_* environment variables or .env)
-  seasons.py         season arithmetic from today's date
-  data.py            LeagueGameLog download, retries, cache, schema checks
-  features.py        leakage safe features shared by training and serving
-  modeling.py        LightGBM + Optuna, model bundle, SHAP explanations
-  distributions.py   negative binomial, recalibration, Gaussian copula
-  fantasy.py         ESPN / Yahoo / Sleeper scoring
-  quant.py           odds, vig, EV, Kelly
-  backtest.py        accuracy, calibration, prop betting backtest
-  train.py           walk forward training pipeline, report, model card, MLflow
-  store.py           live league data and schedule for serving
-  predictor.py       projections, simulations, props, start/sit, slate
-  api/               FastAPI app and request schemas
-web/                 Next.js dashboard
-tests/               pytest suite
-models/              trained bundle, report.json, metrics.json, model_card.md
+  data.py, cdn.py, injuries.py   where data comes from (stats.nba.com, NBA CDN, ESPN)
+  features.py                    leakage safe features, shared by training and serving
+  modeling.py, distributions.py  LightGBM + Optuna, calibrated distributions, copula, SHAP
+  train.py, backtest.py          walk-forward training, evaluation, backtest, model card
+  store.py, predictor.py         live data and everything the app computes
+  fantasy.py, quant.py, lines.py fantasy scoring, betting math, real-lines tracker
+  api/                           FastAPI (also serves the dashboard)
+web/                             Next.js dashboard, exported as a static site
+tests/                           pytest suite (no network: every source is mocked)
 ```
 
 ## Limitations
 
-* The model has no injury or lineup news. If a star teammate is ruled out an hour before tip, it
-  doesn't know.
-* Players need 5 games in a season before they count in training and evaluation.
-* Each stat has its own model, so simulated points aren't forced to equal 2·FGM + 3PM + FTM. The copula
-  keeps them strongly correlated instead.
-* Opponent strength means what a defense has allowed overall, not position by position matchups.
-* Projections and prop prices are informational. The model has never been tested against real closing
-  lines.
+* The injury report is only as good as ESPN's feed, and late scratches after it updates are missed.
+* Players need 5 games in a season before they count in training.
+* Each stat has its own model, so simulated points aren't forced to equal 2·FGM + 3PM + FTM.
+* Everything here is informational. The model's record against real books starts only once the
+  tracker is on.

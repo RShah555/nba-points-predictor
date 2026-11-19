@@ -18,6 +18,7 @@ class GameRequest(BaseModel):
     opponent: str | None = Field(None, description="Team abbreviation; omitted means the next scheduled game")
     home: bool | None = None
     rest_days: int | None = Field(None, ge=1, le=30)
+    teammates_out: list[int] | None = Field(None, description="Teammates sitting out; omitted means the injury report")
 
     @field_validator("opponent")
     @classmethod

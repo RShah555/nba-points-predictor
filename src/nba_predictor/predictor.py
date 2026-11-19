@@ -72,8 +72,14 @@ class Predictor:
 
     # contexts ------------------------------------------------------------------
     def context(
-        self, player_id: int, opponent: str | None = None, home: bool | None = None, rest_days: int | None = None
+        self,
+        player_id: int,
+        opponent: str | None = None,
+        home: bool | None = None,
+        rest_days: int | None = None,
+        teammates_out: list[int] | None = None,
     ) -> tuple[GameContext, str, int]:
+        """The next game for a player. Anything not given comes from the schedule and injury report."""
         info = self.store.player(player_id)
         last_game: date = pd.Timestamp(info["last_game"]).date()
         team = str(info["team"])
@@ -91,6 +97,10 @@ class Predictor:
         if game_date is None:
             game_date = max(self.store.today, last_game + timedelta(days=1))
         rest = (game_date - last_game).days
+        if teammates_out is None:
+            out = self.store.injured_out(team, game_date, exclude=player_id)
+        else:
+            out = tuple(sorted(set(teammates_out) - {player_id}))
         ctx = GameContext(
             player_id,
             opponent.upper(),
@@ -98,6 +108,7 @@ class Predictor:
             game_date,
             season_id(current_season(game_date)),
             team,
+            out,
         )
         return ctx, source, rest
 
@@ -108,7 +119,9 @@ class Predictor:
         out: list[Projection | None] = [None] * len(requests)
         todo: list[tuple[int, GameContext, str, int, tuple]] = []
         for i, r in enumerate(requests):
-            ctx, source, rest = self.context(r["player_id"], r.get("opponent"), r.get("home"), r.get("rest_days"))
+            ctx, source, rest = self.context(
+                r["player_id"], r.get("opponent"), r.get("home"), r.get("rest_days"), r.get("teammates_out")
+            )
             key = (self.store.version, ctx, source)
             if key in self._cache:
                 out[i] = self._cache[key]
@@ -117,7 +130,7 @@ class Predictor:
         if todo:
             contexts = [t[1] for t in todo]
             feats = next_game_features(
-                self.store.history([c.player_id for c in contexts]), contexts, self.store.snapshot
+                self.store.history([c.player_id for c in contexts]), contexts, self.store.snapshot, self.store.roster
             )
             means = self.bundle.predict_means(feats)
             sizes = self.bundle.sizes(means)
@@ -227,18 +240,47 @@ class Predictor:
             "ast": _num(info["ast"]),
             "min": _num(info["min"]),
             "headshot": f"https://cdn.nba.com/headshots/nba/latest/1040x760/{int(player_id)}.png",
+            "injury": self.injury_payload(player_id),
         }
 
-    @staticmethod
-    def context_payload(proj: Projection) -> dict[str, Any]:
+    def injury_payload(self, player_id: int) -> dict[str, Any] | None:
+        i = self.store.injuries.get(int(player_id))
+        if i is None:
+            return None
+        return {"status": i.status, "note": i.note, "return_date": i.return_date, "out": i.out}
+
+    def context_payload(self, proj: Projection, teammates: bool = True) -> dict[str, Any]:
         c = proj.context
-        return {
+        base = {
             "opponent": c.opponent,
             "home": c.home,
             "date": c.game_date.isoformat(),
             "rest_days": proj.rest_days,
             "back_to_back": proj.rest_days == 1,
             "source": proj.context_source,
+            "teammates_out": len(c.teammates_out),
+        }
+        if not teammates:
+            return base
+        regulars = self.store.regulars(c.team or proj.team, c.game_date, exclude=proj.player_id)
+        return {
+            **base,
+            "teammates": [
+                {
+                    "id": pid,
+                    "name": str(self.store.player(pid)["name"]),
+                    "min": round(m, 1),
+                    "pts": round(pts, 1),
+                    "injury": self.injury_payload(pid),
+                    "out": pid in c.teammates_out,
+                }
+                for pid, m, pts in zip(
+                    regulars["PLAYER_ID"].astype(int).tolist(),
+                    regulars["MIN"].astype(float).tolist(),
+                    regulars["PTS"].astype(float).tolist(),
+                    strict=True,
+                )
+            ],
         }
 
     # props ---------------------------------------------------------------------
@@ -291,7 +333,7 @@ class Predictor:
             "players": [
                 {
                     "player": self.player_payload(p.player_id),
-                    "game": self.context_payload(p),
+                    "game": self.context_payload(p, teammates=False),
                     "fantasy": self.fantasy_summary(p, system),
                     "p_best": round(float(np.mean(best == i)), 4),
                 }
@@ -311,10 +353,12 @@ class Predictor:
         teams = {g.home for g in open_games} | {g.away for g in open_games}
         table = self.store.players
         cutoff = pd.Timestamp(self.store.today - timedelta(days=21))
+        ruled_out = [pid for pid, i in self.store.injuries.items() if i.out]
         pool = table[
             table["team"].isin(teams)
             & (table["min_last_10"] >= min_minutes)
             & (pd.to_datetime(table["last_game"]) >= cutoff)
+            & ~table.index.isin(ruled_out)
         ]
         requests = []
         for pid, row in pool.iterrows():
@@ -334,7 +378,7 @@ class Predictor:
             players.append(
                 {
                     "player": self.player_payload(p.player_id),
-                    "game": self.context_payload(p),
+                    "game": self.context_payload(p, teammates=False),
                     "mean": {t: round(v, 2) for t, v in p.means.items()},
                     "fantasy": {k: round(float(score(draws, s).mean()), 2) for k, s in PRESETS.items()},
                 }

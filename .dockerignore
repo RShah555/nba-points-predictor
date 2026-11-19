@@ -1,10 +1,15 @@
 .git
+.github
 .venv
-data
+.env
 mlruns
-web
 tests
 **/__pycache__
 .mypy_cache
 .ruff_cache
 .pytest_cache
+web/node_modules
+web/.next
+web/out
+data/schedule_*.csv
+data/line_ledger.csv

@@ -1,6 +1,6 @@
 # Model card: NBA player projections v2.0.0
 
-Trained 2026-11-19T03:19:18+00:00.
+Trained 2026-11-19T18:23:03+00:00.
 
 ## What it does
 Predicts the full probability distribution of a player's PTS, REB, AST, FG3M, STL, BLK, TOV, FGM, FGA, FTM, FTA in his next game.
@@ -11,7 +11,7 @@ spread depends on the mean. A Gaussian copula ties the stats together for fantas
 NBA.com regular season player game logs via `nba_api` (one LeagueGameLog call per season).
 Held out evaluation: trained on 2023-24, 2024-25 (47,154 games),
 tested on 2025-26 (23,805 games). The serving model is refit on
-2023-24, 2024-25, 2025-26. 152 features, all computed only from games before
+2023-24, 2024-25, 2025-26. 158 features, all computed only from games before
 the one being predicted.
 
 ## Results on 2025-26
@@ -20,20 +20,20 @@ Method                        MAE    RMSE
 Season average so far        4.69    6.17
 Last 5 game average          4.81    6.33
 v1 gradient boosting         4.62    6.00
-v2 LightGBM + Optuna         4.58    5.95
+v2 LightGBM + Optuna         4.51    5.86
 
 Stat   Model MAE  Season avg   Last 5  80% cover
-PTS        4.575       4.693    4.813      85.1%
-REB        1.890       1.921    1.993      89.0%
-AST        1.349       1.368    1.410      91.0%
-FG3M       0.897       0.900    0.936      93.4%
-STL        0.729       0.731    0.759      95.0%
-BLK        0.522       0.508    0.523      95.2%
-TOV        0.891       0.910    0.944      93.5%
-FGM        1.754       1.794    1.847      88.9%
-FGA        2.755       2.876    2.874      85.7%
-FTM        1.354       1.355    1.391      92.5%
-FTA        1.639       1.645    1.689      91.7%
+PTS        4.507       4.693    4.813      84.9%
+REB        1.870       1.921    1.993      88.8%
+AST        1.337       1.368    1.410      90.7%
+FG3M       0.895       0.900    0.936      93.2%
+STL        0.727       0.731    0.759      94.9%
+BLK        0.521       0.508    0.523      95.1%
+TOV        0.884       0.910    0.944      93.4%
+FGM        1.737       1.794    1.847      88.7%
+FGA        2.679       2.876    2.874      85.7%
+FTM        1.349       1.355    1.391      92.4%
+FTA        1.630       1.645    1.689      91.6%
 ```
 
 ## Intended use

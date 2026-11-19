@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { EquityChart, HBars, Heatmap, PitChart, ReliabilityChart } from "@/components/charts";
-import { Card, ErrorState, Segmented, Skeleton, StatTile } from "@/components/ui";
+import { Advanced, Card, ErrorState, Segmented, Skeleton, StatTile } from "@/components/ui";
 import { api } from "@/lib/api";
 import { STAT_LABEL, num, pct } from "@/lib/format";
 import type { Stat } from "@/lib/types";
@@ -28,20 +28,45 @@ export default function ModelPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-semibold text-ink">Model</h1>
-        <p className="text-[14px] text-ink-3">
-          v{r.version}, trained {new Date(r.trained_at).toLocaleString()}. Held out test: {r.test_rows.toLocaleString()} player games from {r.test_season},
-          trained on {r.train_rows.toLocaleString()} from {r.train_seasons.join(" and ")}. {r.n_features} features, {r.optuna_trials} Optuna trials per stat.
-        </p>
+        <h1 className="text-2xl font-semibold text-ink">How it works</h1>
+        <p className="text-[14px] text-ink-3">And how well it has worked on games it never saw.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <StatTile label="Points MAE (test season)" value={num(best.MAE, 2)} sub={`${r.improvement_pct}% better than the best baseline`} tone="good" />
-        <StatTile label="vs v1 model" value={`${r.improvement_vs_v1_pct}%`} sub={`v1 MAE ${num(r.headline["v1 gradient boosting"]?.MAE, 2)}`} />
-        <StatTile label="Points 80% interval coverage" value={pct(r.targets.PTS.coverage_80)} sub="whole numbers push this above 80%" />
-        <StatTile label="Over/under Brier (points)" value={r.backtests.PTS?.brier_model.toFixed(4)} sub="0.25 = coin flip" tone="good" />
+      <Card>
+        <ol className="flex list-decimal flex-col gap-2 pl-5 text-[15px] text-ink-2">
+          <li>
+            For every player it looks at <b className="text-ink">recent form</b> (last 3 to 20 games), minutes, shooting, rest, home or away,
+            how much the <b className="text-ink">opponent</b> gives up, and which <b className="text-ink">teammates are out</b>.
+          </li>
+          <li>
+            A machine learning model trained on {r.train_rows.toLocaleString()} past games turns that into a projection for each stat, plus a
+            realistic range (good nights and bad nights).
+          </li>
+          <li>Fantasy points, double-double odds and betting value all come from those ranges.</li>
+        </ol>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <StatTile
+          label={`Average miss on points (${r.test_season})`}
+          value={`${num(best.MAE, 2)} pts`}
+          sub={`vs ${num(r.headline["Season average so far"]?.MAE, 2)} using the season average: ${r.improvement_pct}% better`}
+          tone="good"
+        />
+        <StatTile label="Games it was tested on" value={r.test_rows.toLocaleString()} sub={`all of ${r.test_season}, never used in training`} />
+        <StatTile
+          label="Are its percentages honest?"
+          value="Yes"
+          sub="when it says 60%, it happens about 60% of the time"
+          tone="good"
+        />
       </div>
 
+      <Advanced title="Advanced: full evaluation, calibration, backtest">
+      <p className="text-[13px] text-ink-3">
+        v{r.version}, trained {new Date(r.trained_at).toLocaleString()}. {r.n_features} features, {r.optuna_trials} Optuna trials per stat,
+        {" "}{r.improvement_vs_v1_pct}% better than v1 on points.
+      </p>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Points: model vs baselines" subtitle="Average miss on the held out season (lower is better)">
           <table className="tabular w-full text-[14px]">
@@ -212,6 +237,7 @@ export default function ModelPage() {
           </table>
         </div>
       </Card>
+      </Advanced>
     </div>
   );
 }

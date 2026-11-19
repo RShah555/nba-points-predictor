@@ -132,6 +132,31 @@ export function Avatar({ src, name, size = 44 }: { src: string; name: string; si
   );
 }
 
+/** Injury status chip: red for out or doubtful, neutral for day-to-day or questionable. */
+export function InjuryBadge({ injury }: { injury: { status: string; note: string; out: boolean } | null | undefined }) {
+  if (!injury) return null;
+  const label = injury.out ? injury.status.toUpperCase() : "GTD";
+  return (
+    <span title={injury.note} className="inline-flex">
+      <Badge tone={injury.out ? "bad" : "neutral"}>{label}</Badge>
+    </span>
+  );
+}
+
+/** Collapsed by default: where the technical detail lives. */
+export function Advanced({ title = "Advanced", children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <details className="group card">
+      <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-[14px] font-medium text-ink-2 hover:text-ink sm:px-5">
+        {title}
+        <span className="text-[12px] text-ink-3 group-open:hidden">Show</span>
+        <span className="hidden text-[12px] text-ink-3 group-open:inline">Hide</span>
+      </summary>
+      <div className="flex flex-col gap-4 border-t border-line p-4 sm:p-5">{children}</div>
+    </details>
+  );
+}
+
 export function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1 text-[12px] text-ink-3">

@@ -67,12 +67,23 @@ def _player_feature_names() -> list[str]:
 DEFENSE_FEATURES: list[str] = [f"OPP_{s}_ALLOWED" for s in DEFENSE_STATS] + [
     f"OPP_{s}_ALLOWED_L10" for s in DEFENSE_STATS
 ]
-FEATURES: list[str] = _player_feature_names() + DEFENSE_FEATURES
+
+# Teammates out: regulars (15+ minutes over their last 10 games, played for the team in the last
+# 21 days) who are not playing. In history that is whoever did not appear in the box score; live it
+# comes from the injury report. Their recent minutes, points, assists, rebounds and usage are summed.
+ABSENCE_STATS: tuple[str, ...] = ("MIN", "PTS", "AST", "REB", "USG")
+ABSENCE_FEATURES: list[str] = [f"OUT_{s}" for s in ABSENCE_STATS] + ["OUT_COUNT"]
+REGULAR_MINUTES = 15.0
+REGULAR_DAYS = 21
+
+FEATURES: list[str] = _player_feature_names() + ABSENCE_FEATURES + DEFENSE_FEATURES
 
 # Families used to turn per-feature SHAP values into explanations a person can read.
 FEATURE_GROUPS: dict[str, str] = {}
 for _f in FEATURES:
-    if _f.startswith("OPP_"):
+    if _f.startswith("OUT_"):
+        FEATURE_GROUPS[_f] = "Teammates out"
+    elif _f.startswith("OPP_"):
         FEATURE_GROUPS[_f] = "Opponent defense"
     elif _f.startswith(("PREV_SEASON",)):
         FEATURE_GROUPS[_f] = "Last season"
@@ -244,12 +255,56 @@ def defense_snapshot(df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([season, last10], axis=1)[DEFENSE_FEATURES]
 
 
+def player_form(df: pd.DataFrame) -> pd.DataFrame:
+    """Each player's last 10 game averages *after* every game (what a teammate brings to the next one)."""
+    played = df[df["GAME_ID"] != NEXT_GAME_ID]
+    stats = played[["MIN", "PTS", "AST", "REB"]].assign(USG=played["FGA"] + 0.44 * played["FTA"] + played["TOV"])
+    form = _drop_group_levels(_grouped(stats, [played["PLAYER_ID"]]).rolling(10, min_periods=1).mean(), 1)
+    return pd.concat([played[["PLAYER_ID", "TEAM", "GAME_ID", "GAME_DATE"]], form], axis=1)
+
+
+def _absence_row(regulars: pd.DataFrame) -> dict[str, float]:
+    row = {f"OUT_{s}": float(regulars[s].sum()) for s in ABSENCE_STATS}
+    row["OUT_COUNT"] = float(len(regulars))
+    return row
+
+
+def _regulars(roster: pd.DataFrame, team: str, on: pd.Timestamp) -> pd.DataFrame:
+    recent = roster["GAME_DATE"] >= on - pd.Timedelta(days=REGULAR_DAYS)
+    return roster[(roster["TEAM"] == team) & recent & (roster["MIN"] >= REGULAR_MINUTES)]
+
+
+def team_absences(df: pd.DataFrame) -> pd.DataFrame:
+    """For every team game, the regulars who did not play, summed (one row per TEAM, GAME_ID).
+
+    Walks the season day by day: a player's roster entry is his latest game (team and form) from
+    *before* the current day, so a traded player counts for his new team only.
+    """
+    form = player_form(df).sort_values("GAME_DATE", kind="mergesort")
+    roster = form.iloc[0:0]
+    out = []
+    for day, games in form.groupby("GAME_DATE", sort=True):
+        for (team, game_id), box in games.groupby(["TEAM", "GAME_ID"]):
+            regs = _regulars(roster, str(team), pd.Timestamp(str(day)))
+            out.append(
+                {"TEAM": team, "GAME_ID": game_id, **_absence_row(regs[~regs["PLAYER_ID"].isin(box["PLAYER_ID"])])}
+            )
+        roster = pd.concat([roster[~roster["PLAYER_ID"].isin(games["PLAYER_ID"])], games], ignore_index=True)
+    return pd.DataFrame(out, columns=["TEAM", "GAME_ID", *ABSENCE_FEATURES])
+
+
+def roster_snapshot(df: pd.DataFrame) -> pd.DataFrame:
+    """Every player's latest team and form: who counts as a regular going into the next game."""
+    return player_form(df).sort_values("GAME_DATE", kind="mergesort").groupby("PLAYER_ID").tail(1)
+
+
 def build_training_frame(raw: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Feature frame for every player game with enough history, plus the latest defense snapshot."""
     df = add_player_features(normalize(raw))
     df = df.merge(defense_features(df), left_on=["OPP", "GAME_ID"], right_on=["DEF_TEAM", "GAME_ID"], how="left").drop(
         columns=["DEF_TEAM"]
     )
+    df = df.merge(team_absences(df), on=["TEAM", "GAME_ID"], how="left")
     df = df[df["GAMES_PLAYED"] >= MIN_PRIOR_GAMES]
     return df.reset_index(drop=True), defense_snapshot(normalize(raw))
 
@@ -264,16 +319,23 @@ class GameContext:
     game_date: dt.date
     season_id: str
     team: str | None = None
+    teammates_out: tuple[int, ...] = ()
 
 
-def next_game_features(history: pd.DataFrame, contexts: Sequence[GameContext], snapshot: pd.DataFrame) -> pd.DataFrame:
+def next_game_features(
+    history: pd.DataFrame,
+    contexts: Sequence[GameContext],
+    snapshot: pd.DataFrame,
+    roster: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """Feature rows for upcoming games, one per context, in the same order.
 
     `history` holds raw game logs (any players). Each context's player must appear in it.
+    `roster` (from roster_snapshot) says who the regulars are; each context lists which are out.
     """
     ids = [c.player_id for c in contexts]
     if len(set(ids)) < len(ids):  # same player twice: each scenario must not see the other as a past game
-        return pd.concat([next_game_features(history, [c], snapshot) for c in contexts], ignore_index=True)
+        return pd.concat([next_game_features(history, [c], snapshot, roster) for c in contexts], ignore_index=True)
     hist = normalize(history)
     hist = hist[hist["PLAYER_ID"].isin(set(ids))]
     placeholders = []
@@ -300,4 +362,13 @@ def next_game_features(history: pd.DataFrame, contexts: Sequence[GameContext], s
     rows = feats[feats["GAME_ID"] == NEXT_GAME_ID].sort_values("_ORDER").reset_index(drop=True)
     for col in DEFENSE_FEATURES:
         rows[col] = rows["OPP"].map(snapshot[col]) if col in snapshot else np.nan
+    absences = []
+    for c, team in zip(contexts, rows["TEAM"], strict=True):
+        if roster is None:
+            absences.append(_absence_row(pd.DataFrame(columns=list(ABSENCE_STATS))))
+            continue
+        regs = _regulars(roster[roster["PLAYER_ID"] != c.player_id], str(team), pd.Timestamp(c.game_date))
+        absences.append(_absence_row(regs[regs["PLAYER_ID"].isin(c.teammates_out)]))
+    for col in ABSENCE_FEATURES:
+        rows[col] = [a[col] for a in absences]
     return rows

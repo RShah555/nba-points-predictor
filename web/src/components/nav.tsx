@@ -6,13 +6,16 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { playerHref } from "@/lib/api";
+
 import { PlayerSearch } from "./player-search";
 
 const LINKS = [
-  { href: "/", label: "Slate" },
-  { href: "/props", label: "Props" },
-  { href: "/compare", label: "Start/Sit" },
-  { href: "/model", label: "Model" },
+  { href: "/", label: "Tonight" },
+  { href: "/compare/", label: "Start/Sit" },
+  { href: "/props/", label: "Props" },
+  { href: "/record/", label: "Record" },
+  { href: "/model/", label: "How it works" },
 ];
 
 function ThemeToggle() {
@@ -64,7 +67,7 @@ export function Nav() {
         </Link>
         <nav className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
           {LINKS.map((l) => {
-            const active = l.href === "/" ? path === "/" : path.startsWith(l.href);
+            const active = l.href === "/" ? path === "/" : path.startsWith(l.href.replace(/\/$/, ""));
             return (
               <Link
                 key={l.href}
@@ -82,7 +85,7 @@ export function Nav() {
         <PlayerSearch
           hotkey
           className="ml-auto hidden w-72 md:block"
-          onSelect={(p) => router.push(`/player/${p.id}`)}
+          onSelect={(p) => router.push(playerHref(p.id))}
         />
         <ThemeToggle />
       </div>

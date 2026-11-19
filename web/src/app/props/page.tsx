@@ -50,8 +50,8 @@ function PropsLab() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-semibold text-ink">Prop lab</h1>
-        <p className="text-[14px] text-ink-3">Model probability vs the book: vig removed, edge, expected value and fractional Kelly sizing.</p>
+        <h1 className="text-2xl font-semibold text-ink">Check a betting line</h1>
+        <p className="text-[14px] text-ink-3">Enter a line you see at a sportsbook and the model says whether it&apos;s worth betting.</p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-5">
@@ -66,12 +66,12 @@ function PropsLab() {
                     {proj.data ? `${shortDate(proj.data.game.date)} ${gameLabel(proj.data.game)}` : player.data.player.team}
                   </div>
                 </div>
-                <button aria-label="Change player" onClick={() => router.replace("/props")} className="rounded-md p-1 text-ink-3 hover:bg-surface-3 hover:text-ink">
+                <button aria-label="Change player" onClick={() => router.replace("/props/")} className="rounded-md p-1 text-ink-3 hover:bg-surface-3 hover:text-ink">
                   <X className="size-4" />
                 </button>
               </div>
             ) : (
-              <PlayerSearch autoFocus placeholder="Choose a player" onSelect={(p) => router.replace(`/props?player=${p.id}`)} />
+              <PlayerSearch autoFocus placeholder="Choose a player" onSelect={(p) => router.replace(`/props/?player=${p.id}`)} />
             )}
             <div className="grid grid-cols-2 gap-3">
               <Field label="Market">
@@ -88,13 +88,18 @@ function PropsLab() {
               <Field label="Under odds">
                 <input className={inputClass} type="number" step={5} value={form.under_odds} onChange={(e) => set({ under_odds: Number(e.target.value) })} />
               </Field>
-              <Field label="Bankroll ($)">
-                <input className={inputClass} type="number" min={1} value={form.bankroll} onChange={(e) => set({ bankroll: Number(e.target.value) })} />
-              </Field>
-              <Field label={`Kelly fraction: ${Math.round(form.kelly_multiplier * 100)}%`}>
-                <input type="range" min={0.05} max={1} step={0.05} value={form.kelly_multiplier} onChange={(e) => set({ kelly_multiplier: Number(e.target.value) })} className="h-9 accent-[var(--accent)]" />
-              </Field>
             </div>
+            <details className="text-[13px]">
+              <summary className="cursor-pointer text-ink-3 hover:text-ink-2">Bet sizing</summary>
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                <Field label="Bankroll ($)">
+                  <input className={inputClass} type="number" min={1} value={form.bankroll} onChange={(e) => set({ bankroll: Number(e.target.value) })} />
+                </Field>
+                <Field label={`Kelly fraction: ${Math.round(form.kelly_multiplier * 100)}%`}>
+                  <input type="range" min={0.05} max={1} step={0.05} value={form.kelly_multiplier} onChange={(e) => set({ kelly_multiplier: Number(e.target.value) })} className="h-9 accent-[var(--accent)]" />
+                </Field>
+              </div>
+            </details>
             <button
               disabled={!playerId || quote.isPending}
               onClick={() => quote.mutate()}
@@ -113,10 +118,25 @@ function PropsLab() {
               subtitle={`${q.method}. Projection ${num(q.projection.mean)} (80%: ${q.projection.p10}–${q.projection.p90}). Book hold ${pct(q.hold)}.`}
               action={<Badge tone={q.recommendation === "pass" ? "neutral" : "accent"}>{q.recommendation === "pass" ? "Pass: no edge" : `Value on the ${q.recommendation}`}</Badge>}
             >
-              <div className="grid gap-3 sm:grid-cols-2">
-                <SideCard q={q.over} recommended={q.recommendation === "over"} />
-                <SideCard q={q.under} recommended={q.recommendation === "under"} />
-              </div>
+              <p className="mb-4 rounded-xl bg-surface-2 p-3.5 text-[15px] text-ink">
+                The model gives the over a <b>{pct(q.p_over, 0)}</b> chance and the under <b>{pct(q.p_under, 0)}</b>. The book&apos;s
+                price implies <b>{pct(q.over.fair_prob, 0)}</b> for the over.{" "}
+                {q.recommendation === "pass" ? (
+                  <>Not enough difference to bet.</>
+                ) : (
+                  <>
+                    That makes the <b>{q.recommendation}</b> a good bet: about <b>${(q[q.recommendation].expected_value * 100).toFixed(2)}</b> expected
+                    profit per $100, suggested stake <b>${q[q.recommendation].kelly_stake.toFixed(2)}</b>.
+                  </>
+                )}
+              </p>
+              <details>
+                <summary className="cursor-pointer text-[13px] text-ink-3 hover:text-ink-2">Full breakdown</summary>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <SideCard q={q.over} recommended={q.recommendation === "over"} />
+                  <SideCard q={q.under} recommended={q.recommendation === "under"} />
+                </div>
+              </details>
               {q.p_push > 0 && <p className="mt-2 text-[12px] text-ink-3">Push (exactly {q.line}): {pct(q.p_push)}</p>}
             </Card>
           ) : (

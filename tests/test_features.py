@@ -6,6 +6,7 @@ import pytest
 
 from conftest import fake_logs
 from nba_predictor.features import (
+    ABSENCE_FEATURES,
     DEFENSE_FEATURES,
     FEATURES,
     GameContext,
@@ -14,6 +15,7 @@ from nba_predictor.features import (
     defense_features,
     next_game_features,
     normalize,
+    roster_snapshot,
 )
 
 
@@ -30,7 +32,7 @@ def test_rolling_features_only_use_past_games():
 def test_changing_a_game_never_changes_its_own_features():
     a = add_player_features(normalize(fake_logs([10, 20, 30, 40, 50, 60])))
     b = add_player_features(normalize(fake_logs([10, 20, 30, 99, 50, 60])))
-    player_features = [c for c in FEATURES if c not in DEFENSE_FEATURES]
+    player_features = [c for c in FEATURES if c not in DEFENSE_FEATURES and c not in ABSENCE_FEATURES]
     pd.testing.assert_frame_equal(a.loc[:3, player_features], b.loc[:3, player_features])
     assert not a.loc[4, player_features].equals(b.loc[4, player_features])
 
@@ -74,12 +76,48 @@ def test_live_features_match_training_features(league):
     pid, game_date = int(target["PLAYER_ID"]), target["GAME_DATE"]
     before = league[pd.to_datetime(league["GAME_DATE"]) < game_date]
     ctx = GameContext(pid, target["OPP"], bool(target["HOME"]), game_date.date(), "22025")
-    player_features = [c for c in FEATURES if c not in DEFENSE_FEATURES]
+    player_features = [c for c in FEATURES if c not in DEFENSE_FEATURES and c not in ABSENCE_FEATURES]
     live = next_game_features(before, [ctx], pd.DataFrame(columns=DEFENSE_FEATURES))
     np.testing.assert_allclose(
         live[player_features].iloc[0].to_numpy(dtype=float),
         target[player_features].to_numpy(dtype=float),
         equal_nan=True,
+    )
+
+
+def _without(league, player_id, game_id):
+    return league[~((league["PLAYER_ID"] == player_id) & (league["GAME_ID"] == game_id))]
+
+
+def test_absent_regular_is_counted_for_teammates(league):
+    """Drop a regular from one game: his teammates' OUT_* features pick him up, nobody else's do."""
+    games = league[(league["PLAYER_ID"] == 0) & (league["SEASON_ID"] == "22025")]
+    game_id = games["GAME_ID"].iloc[15]
+    frame, _ = build_training_frame(_without(league, 0, game_id))
+    rows = frame[frame["GAME_ID"] == game_id]
+    teammates = rows[rows["TEAM"] == "BOS"]
+    opponents = rows[rows["TEAM"] != "BOS"]
+    baseline, _ = build_training_frame(league)
+    before = baseline[(baseline["GAME_ID"] == game_id) & (baseline["TEAM"] == "BOS")]
+    assert (teammates["OUT_COUNT"].to_numpy() == before["OUT_COUNT"].iloc[0] + 1).all()
+    assert (teammates["OUT_MIN"] > before["OUT_MIN"].iloc[0]).all()
+    assert opponents["OUT_COUNT"].equals(
+        baseline[(baseline["GAME_ID"] == game_id) & (baseline["TEAM"] != "BOS")].set_index(opponents.index)["OUT_COUNT"]
+    )
+
+
+def test_live_absences_match_training(league):
+    """Train/serve parity for teammates out: the injury report path gives the box score path's numbers."""
+    games = league[(league["PLAYER_ID"] == 0) & (league["SEASON_ID"] == "22025")]
+    game_id, game_date = games["GAME_ID"].iloc[15], pd.Timestamp(games["GAME_DATE"].iloc[15])
+    data = _without(league, 0, game_id)
+    frame, _ = build_training_frame(data)
+    target = frame[(frame["GAME_ID"] == game_id) & (frame["PLAYER_ID"] == 1)].iloc[0]
+    before = data[pd.to_datetime(data["GAME_DATE"]) < game_date]
+    ctx = GameContext(1, target["OPP"], bool(target["HOME"]), game_date.date(), "22025", "BOS", teammates_out=(0,))
+    live = next_game_features(before, [ctx], pd.DataFrame(columns=DEFENSE_FEATURES), roster_snapshot(normalize(before)))
+    np.testing.assert_allclose(
+        live[ABSENCE_FEATURES].iloc[0].to_numpy(dtype=float), target[ABSENCE_FEATURES].to_numpy(dtype=float)
     )
 
 

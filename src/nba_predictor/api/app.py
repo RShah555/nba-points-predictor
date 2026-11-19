@@ -17,9 +17,10 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from .. import __version__
+from .. import __version__, lines
 from ..config import Settings, get_settings
 from ..fantasy import PRESETS
 from ..predictor import MARKET_LABELS, Predictor
@@ -161,10 +162,11 @@ def create_app(predictor: Predictor | None = None, settings: Settings | None = N
         p = ready()
 
         def work() -> dict[str, Any]:
-            proj = p.project([req.model_dump(include={"player_id", "opponent", "home", "rest_days"})])[0]
+            game = req.model_dump(include=set(GameRequest.model_fields))
+            proj = p.project([game])[0]
             return {
                 "player": p.player_payload(proj.player_id),
-                "game": p.context_payload(proj),
+                "game": p.context_payload(proj, teammates=False),
                 **p.price(
                     proj,
                     req.market,
@@ -199,5 +201,35 @@ def create_app(predictor: Predictor | None = None, settings: Settings | None = N
         if state["report"] is None:
             raise HTTPException(404, "No training report found. Run `nba-predictor train` first.")
         return state["report"]
+
+    @app.get("/api/tracker")
+    def tracker() -> dict[str, Any]:
+        """The model's forward record against real sportsbook lines."""
+        p = ready()
+        ledger = lines.grade(lines.read_ledger(settings), p.store.norm)
+        recent = ledger.sort_values("game_date", ascending=False).head(100)
+        return {
+            "enabled": bool(settings.odds_api_key),
+            "summary": lines.summary(ledger),
+            "rows": json.loads(recent.to_json(orient="records")),
+        }
+
+    @app.post("/api/tracker/snapshot")
+    async def tracker_snapshot() -> dict[str, Any]:
+        p = ready()
+        if not settings.odds_api_key:
+            raise HTTPException(400, "Set NBA_ODDS_API_KEY to track real lines (free key at the-odds-api.com).")
+
+        def work() -> dict[str, Any]:
+            props = lines.fetch_props(settings.odds_api_key or "", settings.odds_markets)
+            ledger = lines.grade(lines.snapshot(p, props), p.store.norm)
+            ledger.to_csv(settings.ledger_path, index=False)
+            return {"props": len(props), "summary": lines.summary(ledger)}
+
+        return await run_in_threadpool(work)
+
+    # The built dashboard, when present, is served from the same origin as the API.
+    if settings.web_dir.exists():
+        app.mount("/", StaticFiles(directory=settings.web_dir, html=True), name="web")
 
     return app

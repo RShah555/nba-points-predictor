@@ -1,6 +1,6 @@
 {
   "version": "2.0.0",
-  "trained_at": "2026-11-19T03:19:18+00:00",
+  "trained_at": "2026-11-19T18:23:03+00:00",
   "train_seasons": [
     "2023-24",
     "2024-25"
@@ -22,10 +22,10 @@
       "RMSE": 5.996
     },
     "v2 LightGBM + Optuna": {
-      "MAE": 4.575,
-      "RMSE": 5.95
+      "MAE": 4.507,
+      "RMSE": 5.86
     }
   },
-  "improvement_pct": 2.5,
-  "improvement_vs_v1_pct": 0.9
+  "improvement_pct": 4.0,
+  "improvement_vs_v1_pct": 2.3
 }

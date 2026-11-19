@@ -29,9 +29,16 @@ class Settings(BaseSettings):
     request_timeout: int = 120
     retry_attempts: int = 4  # first try plus 3 retries
     retry_wait_seconds: float = 30.0
-    live_refresh_hours: float = 6.0
+    live_refresh_hours: float = 2.0
+    injury_refresh_minutes: float = 30.0
 
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    # Real sportsbook lines (the-odds-api.com). Tracking is off until a key is set.
+    odds_api_key: str | None = None
+    odds_markets: list[str] = Field(default_factory=lambda: ["player_points"])  # each market costs credits
+
+    # The built dashboard (web/out). When present the API serves it, so one process is the whole app.
+    web_dir: Path = ROOT / "web" / "out"
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000", "http://localhost:3001"])
     mlflow_tracking_uri: str = f"sqlite:///{(ROOT / 'mlruns' / 'mlflow.db').as_posix()}"
 
     @property
@@ -41,6 +48,10 @@ class Settings(BaseSettings):
     @property
     def report_path(self) -> Path:
         return self.artifacts_dir / "report.json"
+
+    @property
+    def ledger_path(self) -> Path:
+        return self.data_dir / "line_ledger.csv"
 
 
 @lru_cache

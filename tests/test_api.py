@@ -116,7 +116,7 @@ def test_compare(client):
         "/api/compare", json={"players": [{"player_id": 0}, {"player_id": 100}], "scoring": "yahoo"}
     ).json()
     p = body["p_beats"]
-    assert p[0][1] + p[1][0] == pytest.approx(1, abs=1e-6)
+    assert p[0][1] + p[1][0] == pytest.approx(1, abs=1e-3)  # each is rounded to 4 decimals
     assert sum(x["p_best"] for x in body["players"]) == pytest.approx(1)
 
 
