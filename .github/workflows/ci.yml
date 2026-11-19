@@ -18,6 +18,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - name: Runtime dependencies are complete (what the server installs, no dev tools)
+        run: |
+          pip install .
+          cd /tmp && python -c "import importlib, pkgutil, nba_predictor as p; [importlib.import_module(m.name) for m in pkgutil.walk_packages(p.__path__, 'nba_predictor.') if not m.name.endswith('__main__')]"
       - run: pip install -e ".[dev]"
       - name: Lint
         run: ruff check . && ruff format --check .
