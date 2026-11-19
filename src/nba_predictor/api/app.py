@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -34,21 +35,27 @@ def create_app(predictor: Predictor | None = None, settings: Settings | None = N
     settings = settings or get_settings()
     state: dict[str, Any] = {"predictor": predictor, "error": None, "report": None}
 
+    def start() -> None:
+        try:
+            from ..modeling import ModelBundle
+
+            bundle = ModelBundle.load(settings.bundle_path)
+            store = LeagueStore(settings)
+            store.load()
+            state["predictor"] = Predictor(bundle, store, settings)
+            log.info("Ready")
+        except FileNotFoundError:
+            state["error"] = "No trained model found. Run `nba-predictor train` first."
+        except Exception as e:  # keep the API up so /health can say what is wrong
+            log.exception("Startup failed")
+            state["error"] = f"Startup failed: {e}"
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        # Load in the background so the port opens at once: hosts that sleep idle apps (Render's free
+        # plan) restart cold, and the dashboard shows "starting up" until the data is in.
         if state["predictor"] is None:
-            try:
-                from ..modeling import ModelBundle
-
-                bundle = ModelBundle.load(settings.bundle_path)
-                store = LeagueStore(settings)
-                await run_in_threadpool(store.load)
-                state["predictor"] = Predictor(bundle, store, settings)
-            except FileNotFoundError:
-                state["error"] = "No trained model found. Run `nba-predictor train` first."
-            except Exception as e:  # keep the API up so /health can say what is wrong
-                log.exception("Startup failed")
-                state["error"] = f"Startup failed: {e}"
+            threading.Thread(target=start, daemon=True).start()
         if settings.report_path.exists():
             state["report"] = json.loads(settings.report_path.read_text())
         yield
@@ -83,14 +90,14 @@ def create_app(predictor: Predictor | None = None, settings: Settings | None = N
 
     def ready() -> Predictor:
         if state["predictor"] is None:
-            raise HTTPException(503, state["error"] or "Model is loading")
+            raise HTTPException(503, state["error"] or "Starting up: loading the latest games")
         return state["predictor"]
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
         p = state["predictor"]
         return {
-            "status": "ok" if p else "degraded",
+            "status": "ok" if p else ("error" if state["error"] else "starting"),
             "version": __version__,
             "error": state["error"],
             "data_version": p.store.version if p else None,

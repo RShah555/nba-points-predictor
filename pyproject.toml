@@ -28,7 +28,6 @@ dependencies = [
 
 [project.optional-dependencies]
 mlops = ["mlflow>=2.12"]
-deploy = ["huggingface_hub>=0.24"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",

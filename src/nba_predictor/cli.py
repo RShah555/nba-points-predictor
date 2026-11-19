@@ -3,6 +3,7 @@
 nba-predictor train [--trials 20] [--no-mlflow]   tune, evaluate and save the model
 nba-predictor refresh                             pull the latest games, schedule and injuries
 nba-predictor lines                               save today's real prop lines and grade old ones
+nba-predictor snapshot                            refresh, then write snapshot/ for hosted deploys
 nba-predictor serve [--port 8000]                 run the app (API + dashboard)
 """
 
@@ -22,6 +23,7 @@ def main(argv: list[str] | None = None) -> None:
     train.add_argument("--no-mlflow", action="store_true", help="skip MLflow experiment tracking")
     sub.add_parser("refresh", help="pull the latest games, schedule and injury report")
     sub.add_parser("lines", help="snapshot today's real prop lines and grade finished ones (needs NBA_ODDS_API_KEY)")
+    sub.add_parser("snapshot", help="refresh, then save compressed game logs to snapshot/ (shipped with deploys)")
     serve = sub.add_parser("serve", help="run the app")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
@@ -50,6 +52,23 @@ def main(argv: list[str] | None = None) -> None:
     store.load()
     if args.command == "refresh":
         print(f"{len(store.raw):,} player games for {', '.join(store.seasons)}; {len(store.injuries)} on injury report")
+        return
+    if args.command == "snapshot":
+        import gzip
+        import shutil
+
+        from .config import ROOT
+        from .data import season_path
+
+        out = ROOT / "snapshot"
+        out.mkdir(exist_ok=True)
+        for old in out.glob("player_logs_*.csv.gz"):
+            old.unlink()
+        for season in store.seasons:
+            src = season_path(season, settings)
+            with src.open("rb") as f_in, gzip.open(out / f"{src.name}.gz", "wb", compresslevel=9) as f_out:
+                shutil.copyfileobj(f_in, f_out)
+            print(f"snapshot/{src.name}.gz")
         return
 
     from . import lines

@@ -2,8 +2,8 @@
 #
 #   docker build -t nba-predictor . && docker run -p 7860:7860 nba-predictor
 #
-# Expects models/ (trained bundle) and data/player_logs_<last season>.csv in the build context.
-# The season in progress is downloaded from cdn.nba.com at startup and kept up to date.
+# Uses the trained model in models/ and the game log snapshot in snapshot/ (refresh it with
+# `nba-predictor snapshot`). New games since the snapshot come from cdn.nba.com at startup.
 
 FROM node:20-alpine AS web
 WORKDIR /web
@@ -22,11 +22,15 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 RUN pip install .
 
-COPY --chown=app models ./models
-COPY --chown=app data ./data
+COPY models ./models
+COPY snapshot ./snapshot
+RUN mkdir -p data && for f in snapshot/*.csv.gz; do gunzip -c "$f" > "data/$(basename "$f" .gz)"; done \
+    && chown -R app /app/data /app/models
 COPY --from=web --chown=app /web/out ./web/out
 USER app
 
-ENV NBA_DATA_DIR=/app/data NBA_ARTIFACTS_DIR=/app/models NBA_WEB_DIR=/app/web/out PORT=7860
+# stats.nba.com blocks most cloud servers: fail fast there and rely on cdn.nba.com.
+ENV NBA_DATA_DIR=/app/data NBA_ARTIFACTS_DIR=/app/models NBA_WEB_DIR=/app/web/out \
+    NBA_RETRY_ATTEMPTS=1 NBA_REQUEST_TIMEOUT=20 PORT=7860
 EXPOSE 7860
 CMD ["sh", "-c", "uvicorn nba_predictor.api:create_app --factory --host 0.0.0.0 --port ${PORT}"]

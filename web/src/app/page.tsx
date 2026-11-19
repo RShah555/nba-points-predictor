@@ -42,6 +42,12 @@ export default function TonightPage() {
         <Segmented value={scoring} options={SCORING} onChange={setScoring} />
       </div>
 
+      {slate.isLoading && slate.failureCount > 0 && (
+        <div className="card px-4 py-3 text-[14px] text-ink-2">
+          Waking up the server and loading the latest games. This takes about a minute after a quiet spell.
+        </div>
+      )}
+
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {slate.isLoading && Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-14 w-32 shrink-0" />)}
         {slate.data?.games.map((g) => (

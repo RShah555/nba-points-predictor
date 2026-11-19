@@ -1,0 +1,15 @@
+# Render blueprint: render.com -> New -> Blueprint -> pick this repo -> Apply.
+# Builds the Dockerfile straight from the (private) GitHub repo and redeploys on every push to main.
+services:
+  - type: web
+    name: nba-predictor
+    runtime: docker
+    plan: free
+    region: ohio
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NBA_ODDS_API_KEY # optional: turns on the real-lines tracker
+        sync: false
