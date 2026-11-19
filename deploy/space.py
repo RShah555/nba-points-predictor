@@ -52,7 +52,7 @@ def main() -> None:
     sha = git("rev-parse", "HEAD")
     if git("status", "--porcelain", "--untracked-files=no"):
         raise SystemExit("Commit your changes first: the Space builds from a pushed commit.")
-    if sha not in git("branch", "-r", "--contains", sha):
+    if not git("branch", "-r", "--contains", sha):  # no remote branch has this commit
         raise SystemExit("Push first: the Space builds from GitHub.")
 
     api = HfApi()
